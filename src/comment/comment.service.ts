@@ -1,78 +1,82 @@
+import { HttpService } from '@nestjs/axios';
 import { Injectable } from '@nestjs/common';
 import { EntityNotFoundError } from 'src/utils/errors/EntityNotFoundError';
 import { CreateCommentDto } from './dto/create-comment.dto';
 import { UpdateCommentDto } from './dto/update-comment.dto';
-import { IComment } from './comment.schema';
-import { InjectModel } from '@nestjs/mongoose';
-import { Model } from 'mongoose';
+import { CommentEntity } from './entities/comment.entity';
 
 @Injectable()
 export class CommentService {
  
-  constructor(
-    @InjectModel('Comment')
-    private commentModel: Model<IComment>
-  ) {}
+  private comments: CommentEntity[] = [
+    {
+      id: 1,
+      comment: 'Some comment',
+      user_id: '1',
+    },
+  ];
+  
+  constructor(private httpService: HttpService) {}
 
-  async create(createCommentDto: CreateCommentDto) {    
-    const newComment = new this.commentModel(createCommentDto);
-    const savedComment = await newComment.save();
-    return formatComment(savedComment);    
+  create(createCommentDto: CreateCommentDto) {    
+    const lastId = this.comments[this.comments.length - 1]?.id || 0;
+
+      const newComment = {
+        id: lastId + 1,
+        ...createCommentDto,
+      };
+
+      this.comments.push(newComment);
+
+      return newComment;    
   }
 
-  async findAll() {
-    const comments = await this.commentModel.find();
-    return comments.map((comment: IComment) => formatComment(comment));
+  findAll() {
+    return this.comments;
   }
 
-  async findOne(id: string) {
-    try{      
-      const comment = await this.commentModel.findById(id);
-      
-      if(!comment){
-        throw new EntityNotFoundError(`Comentário ${id} não encontrado`);
-      }     
+  findOne(id: number) {
+    const comment = this.comments.find((comment) => comment.id === id);
 
-      return formatComment(comment);
-
-    } catch(err) {
-      throw new EntityNotFoundError(`Comentário ${id} não encontrado`);
+    if (comment) {
+      return comment;
     }
+    
+    throw new EntityNotFoundError(`Comentário ${id} não encontrado`);
   }
 
-  async update(id: string, updateCommentDto: UpdateCommentDto) {
-    await this.findOne(id);
-    
-    await this.commentModel.findOneAndUpdate({ _id: id }, updateCommentDto);
-    
-    const updatedComment = await this.findOne(id);
-    
-    return formatComment(updatedComment);
+  update(id: number, updateCommentDto: UpdateCommentDto) {
+    const comment = this.findOne(id);
+
+    const index = this.comments.indexOf(comment);
+
+    const newComment = {
+      ...comment,
+      ...updateCommentDto,
+    };
+
+    this.comments[index] = newComment;
+
+    return newComment;
   }
 
-  async remove(id: string) {
-    await this.findOne(id);
-    await this.commentModel.findByIdAndDelete(id);
+  remove(id: number) {
+    const comment = this.findOne(id);
+
+    const index = this.comments.indexOf(comment);
+
+    this.comments.splice(index, 1);
   }
 
-  async findByUserId(id: string) {
-    try {
-      const comments = await this.commentModel.find({ user_id: id });
+  findByUserId(id: string) {
+    const comment = this.comments.filter((comment) => comment.user_id === id);
 
-      if (!comments) {
-        throw new EntityNotFoundError(`Comentário não encontrado para usuário ${id}`);
-      }
-
-      return comments.map((comment: IComment) => formatComment(comment));
-    } catch (err) {
-      throw new EntityNotFoundError(`Comentário não encontrado para usuário ${id}`);
+    if (comment) {       
+      return comment;
     }
+    
+    throw new EntityNotFoundError(`Usuário ${id} não encontrado`);
+
   }
 
 }
-
-const formatComment = (comment: IComment) => ({
-  id: comment.id,
-  comment: comment.comment,
-  user_id: comment.user_id,
-})
